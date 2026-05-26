@@ -1,0 +1,717 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>投資アプリ Pro++ API版</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+  background:#0f172a;
+  color:#e5e7eb;
+  font-family:sans-serif;
+  max-width:700px;
+  margin:auto;
+  padding:15px;
+}
+
+h1{
+  text-align:center;
+}
+
+.card{
+  background:#1e293b;
+  padding:15px;
+  margin:15px 0;
+  border-radius:12px;
+  box-shadow:0 0 10px rgba(0,0,0,0.3);
+}
+
+input, button{
+  width:100%;
+  padding:10px;
+  margin-top:8px;
+  border:none;
+  border-radius:8px;
+  font-size:15px;
+}
+
+button{
+  background:#2563eb;
+  color:white;
+  cursor:pointer;
+}
+
+button:hover{
+  opacity:0.9;
+}
+
+.resultBox{
+  padding:15px;
+  border-radius:10px;
+  margin-top:15px;
+  font-size:24px;
+  font-weight:bold;
+  text-align:center;
+}
+
+.buy{
+  background:#065f46;
+}
+
+.wait{
+  background:#78350f;
+}
+
+.avoid{
+  background:#7f1d1d;
+}
+
+.small{
+  font-size:13px;
+  color:#94a3b8;
+}
+
+.notice{
+  background:#312e81;
+  padding:10px;
+  border-radius:10px;
+  margin-top:10px;
+  font-size:13px;
+}
+
+.barWrap{
+  background:#334155;
+  height:20px;
+  border-radius:10px;
+  overflow:hidden;
+  margin-top:10px;
+}
+
+.bar{
+  height:100%;
+  width:0%;
+}
+
+.good{
+  background:#22c55e;
+}
+
+.mid{
+  background:#f59e0b;
+}
+
+.bad{
+  background:#ef4444;
+}
+
+canvas{
+  margin-top:20px;
+  background:white;
+  border-radius:10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>📊 投資アプリ Pro++ API版</h1>
+
+<div class="card">
+
+<label>銘柄名</label>
+
+<input id="name" placeholder="例：IONQ / 7203.T">
+
+<div class="notice">
+🇯🇵 日本株は「.T」が必要です<br>
+例：<br>
+・トヨタ → 7203.T<br>
+・任天堂 → 7974.T
+</div>
+
+<label>現在価格</label>
+
+<input id="price" type="number" placeholder="例：35">
+
+<button onclick="getStockPrice()">
+📡 株価取得
+</button>
+
+<button onclick="autoSetting()">
+🤖 初心者モード
+</button>
+
+<label>利確ライン</label>
+<input id="take">
+
+<label>損切ライン</label>
+<input id="stop">
+
+<button onclick="runAI()">
+🧠 AI判定する
+</button>
+
+<div id="resultArea"></div>
+
+<div class="small" id="reason"></div>
+
+<div class="barWrap">
+  <div id="riskBar" class="bar"></div>
+</div>
+
+<div id="riskText" class="small"></div>
+
+</div>
+
+<div class="card">
+
+<h3>📈 投資分析</h3>
+
+<div id="stats"></div>
+<div id="typeStats"></div>
+<div id="weakness"></div>
+
+</div>
+
+<div class="card">
+
+<h3>📝 履歴</h3>
+
+<div id="logList"></div>
+
+</div>
+
+<div class="card">
+
+<h3>📊 価格推移</h3>
+
+<canvas id="chart"></canvas>
+
+</div>
+
+<script>
+
+// =====================
+// APIキー
+// =====================
+
+const API_KEY = "DMGHXI6KUTIWF9UO";
+
+// =====================
+
+let prices = [];
+let chart;
+
+let logs =
+JSON.parse(localStorage.getItem("logs")) || [];
+
+// =====================
+// 株価取得API
+// =====================
+
+async function getStockPrice(){
+
+  let symbol =
+  document.getElementById("name").value;
+
+  if(!symbol){
+
+    alert("銘柄名を入力してください");
+    return;
+
+  }
+
+  let url =
+  https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY};
+
+  try{
+
+    let response =
+    await fetch(url);
+
+    let data =
+    await response.json();
+
+    console.log(data);
+
+    let price =
+    data["Global Quote"]["05. price"];
+
+    if(price){
+
+      document.getElementById("price").value =
+      Math.round(price);
+
+      alert("株価取得成功");
+
+    }else{
+
+      alert(
+        "取得失敗\n\n銘柄名を確認してください。\n日本株は .T が必要です。"
+      );
+
+    }
+
+  }catch(error){
+
+    console.log(error);
+
+    alert("通信エラー");
+
+  }
+
+}
+
+// =====================
+// タイプ判定
+// =====================
+
+function detectType(name){
+
+  name = name.toLowerCase();
+
+  if(name.includes("ionq")){
+    return "爆発";
+  }
+
+  if(name.includes("nv")){
+    return "成長";
+  }
+
+  if(name.includes("任天堂")){
+    return "安定";
+  }
+
+  return "成長";
+}
+
+// =====================
+// 初心者モード
+// =====================
+
+function autoSetting(){
+
+  let p =
+  Number(document.getElementById("price").value);
+
+  let name =
+  document.getElementById("name").value;
+
+  let type =
+  detectType(name);
+
+  let take;
+  let stop;
+
+  if(type === "安定"){
+
+    take = 1.15;
+    stop = 0.93;
+
+  }
+
+  if(type === "成長"){
+
+    take = 1.25;
+    stop = 0.90;
+
+  }
+
+  if(type === "爆発"){
+
+    take = 1.40;
+    stop = 0.85;
+
+  }
+
+  document.getElementById("take").value =
+  Math.round(p * take);
+
+  document.getElementById("stop").value =
+  Math.round(p * stop);
+
+}
+
+// =====================
+// AI判定
+// =====================
+
+function runAI(){
+
+  let name =
+  document.getElementById("name").value;
+
+  let p =
+  Number(document.getElementById("price").value);
+
+  let take =
+  Number(document.getElementById("take").value);
+
+  let stop =
+  Number(document.getElementById("stop").value);
+
+  let type =
+  detectType(name);
+
+  let score = 0;
+
+  let reasons = [];
+
+  // 割安判定
+
+  if(p < 40){
+
+    score += 2;
+    reasons.push("比較的割安");
+
+  }else if(p < 60){
+
+    score += 1;
+    reasons.push("中間価格帯");
+
+  }else{
+
+    score -= 1;
+    reasons.push("高値圏の可能性");
+
+  }
+
+  // 利益期待
+
+  let reward =
+  (take - p) / p;
+
+  if(reward > 0.2){
+
+    score += 2;
+    reasons.push("利益期待が高い");
+
+  }else if(reward > 0.1){
+
+    score += 1;
+    reasons.push("利益期待あり");
+
+  }
+
+  // リスク
+
+  let risk =
+  (p - stop) / p;
+
+  if(risk > 0.2){
+
+    score -= 2;
+    reasons.push("損切幅が広い");
+
+  }else if(risk > 0.1){
+
+    score -= 1;
+    reasons.push("ややリスクあり");
+
+  }
+
+  // タイプ別
+
+  if(type === "爆発"){
+    reasons.push("値動き激しめ");
+  }
+
+  if(type === "安定"){
+    reasons.push("比較的安定型");
+  }
+
+  // 判定
+
+  let result = "";
+  let cls = "";
+
+  if(score >= 3){
+
+    result = "🟢 買い";
+    cls = "buy";
+
+  }else if(score >= 1){
+
+    result = "🟡 様子見";
+    cls = "wait";
+
+  }else{
+
+    result = "🔴 注意";
+    cls = "avoid";
+
+  }
+
+  // 表示
+
+  document.getElementById("resultArea").innerHTML =
+  `
+  <div class="resultBox ${cls}">
+    ${result}
+  </div>
+  `;
+
+  document.getElementById("reason").innerHTML =
+  reasons.map(r => "• " + r).join("<br>");
+
+  // =====================
+  // リスクバー
+  // =====================
+
+  let riskPercent =
+  Math.round(risk * 100);
+
+  let riskBar =
+  document.getElementById("riskBar");
+
+  riskBar.style.width =
+  riskPercent + "%";
+
+  if(risk < 0.1){
+
+    riskBar.className =
+    "bar good";
+
+  }else if(risk < 0.2){
+
+    riskBar.className =
+    "bar mid";
+
+  }else{
+
+    riskBar.className =
+    "bar bad";
+
+  }
+
+  document.getElementById("riskText").innerHTML =
+  `⚠️ リスク：${riskPercent}%`;
+
+  // =====================
+  // 履歴保存
+  // =====================
+
+  let log = {
+
+    name:name,
+    type:type,
+    result:result,
+    score:score,
+    date:new Date().toLocaleString()
+
+  };
+
+  logs.push(log);
+
+  localStorage.setItem(
+    "logs",
+    JSON.stringify(logs)
+  );
+
+  updateStats();
+
+  prices.push(p);
+
+  drawChart();
+
+}
+
+// =====================
+// 統計
+// =====================
+
+function updateStats(){
+
+  let total =
+  logs.length;
+
+  let buyCount =
+  logs.filter(l =>
+    l.result.includes("買い")
+  ).length;
+
+  let rate =
+  total
+  ? Math.round((buyCount / total) * 100)
+  : 0;
+
+  document.getElementById("stats").innerHTML =
+  `📈 買い判定率：${rate}%（${buyCount}/${total}）`;
+
+  updateTypeStats();
+  updateWeakness();
+  updateLog();
+
+}
+
+// =====================
+// タイプ分析
+// =====================
+
+function updateTypeStats(){
+
+  let types =
+  ["安定","成長","爆発"];
+
+  let text =
+  "📊 タイプ分析<br><br>";
+
+  types.forEach(t => {
+
+    let list =
+    logs.filter(l =>
+      l.type === t
+    );
+
+    if(list.length){
+
+      let buy =
+      list.filter(l =>
+        l.result.includes("買い")
+      ).length;
+
+      let rate =
+      Math.round((buy / list.length) * 100);
+
+      text +=
+      `${t}：${rate}%<br>`;
+
+    }
+
+  });
+
+  document.getElementById("typeStats").innerHTML =
+  text;
+
+}
+
+// =====================
+// 苦手分析
+// =====================
+
+function updateWeakness(){
+
+  let types =
+  ["安定","成長","爆発"];
+
+  let worst = "";
+  let min = 999;
+
+  types.forEach(t => {
+
+    let list =
+    logs.filter(l =>
+      l.type === t
+    );
+
+    if(list.length){
+
+      let buy =
+      list.filter(l =>
+        l.result.includes("買い")
+      ).length;
+
+      let rate =
+      Math.round((buy / list.length) * 100);
+
+      if(rate < min){
+
+        min = rate;
+        worst = t;
+
+      }
+
+    }
+
+  });
+
+  document.getElementById("weakness").innerHTML =
+  `⚠️ 苦手タイプ：${worst}`;
+
+}
+
+// =====================
+// 履歴
+// =====================
+
+function updateLog(){
+
+  let html = "";
+
+  logs
+  .slice(-5)
+  .reverse()
+  .forEach(l => {
+
+    html +=
+    `
+    <div class="small">
+      ${l.date}<br>
+      ${l.name} (${l.type})
+      → ${l.result}
+      <hr>
+    </div>
+    `;
+
+  });
+
+  document.getElementById("logList").innerHTML =
+  html;
+
+}
+
+// =====================
+// グラフ
+// =====================
+
+function drawChart(){
+
+  let ctx =
+  document.getElementById("chart");
+
+  if(chart){
+    chart.destroy();
+  }
+
+  chart =
+  new Chart(ctx, {
+
+    type:"line",
+
+    data:{
+
+      labels:
+      prices.map((_, i) => i + 1),
+
+      datasets:[{
+
+        label:"価格推移",
+
+        data:prices,
+
+        borderColor:"#60a5fa",
+
+        tension:0.3
+
+      }]
+    }
+
+  });
+
+}
+
+updateStats();
+
+</script>
+
+</body>
+</html>
+`
